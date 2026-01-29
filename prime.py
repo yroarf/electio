@@ -14,6 +14,7 @@ import tempfile
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.base_models import InputFormat
+from groq.types.chat import ChatCompletionUserMessageParam
 
 from rascunho import extrair_subdominio_gov
 
@@ -57,37 +58,64 @@ LISTA_1 = [
 
 # ======================= PROMPT DE ANÁLISE =============
 
-prompt_padrao = f"""
-Você é um analista jurídico especializado em direito eleitoral.
+if "data_referencia" not in st.session_state:
+    st.session_state.data_referencia = []
+if "base_legal" not in st.session_state:
+    st.session_state.base_legal = []
 
-Analise o texto fornecido e identifique qualquer indício de conduta vedada aos agentes públicos **em período eleitoral**, considerando a data de referência: {data_referencia}.
+prompt_padrao = """
+[PERSONA]
+Você é um jurista especializado em compliance, com larga experiência em Direito Administrativo, Direito Eleitoral e ética na Administração Pública Federal.
+Atue de forma técnica, objetiva, fundamentada e neutra, sem emitir juízos políticos ou valorativos.
+[/PERSONA]
 
-As vedações e restrições devem ser avaliadas com base no momento próximo à data informada ({data_referencia}).
+[CONTEXTO]
+Durante o período eleitoral, é essencial que a Administração Pública observe rigorosamente as normas legais e éticas aplicáveis às comunicações institucionais.
 
-Considere na análise a base legal ({base_legal}) de referência informada pelo usuário.
+Para fins desta análise de compliance, são considerados, exclusivamente o conteúdo da ({base_legal}) e da data do pleito ({data_referencia})
 
-REGRAS OBRIGATÓRIAS:
-- Não adicione explicações, introduções ou conclusões.
-- Não use markdown, negrito ou qualquer formatação.
-- Retorne APENAN um JSON válido com a estrutura exata abaixo.
+[FLUXO]
+Siga rigorosamente a sequência abaixo, sem pular etapas:
 
-FORMATO OBRIGATÓRIO DO RETORNO (nada mais, nada menos):
+1. Analise o conteúdo textual de cada trecho, considerando exclusivamente a base legal ({base_legal}).
+2. As análises são feitas individualmente para cada trecho extraído da URL, seguindo os CRITÉRIOS indicados.
+
+[CRITÉRIOS]
+- Considere como "trecho significativo" toda frase ou parágrafo que contenha uma ideia completa e autônoma.
+- Avalie cada trecho quanto à sua aderência à base legal, considerando as vedações de conduta durante o defeso eleitoral .
+- A análise deve ser estritamente jurídica e normativa, sem conjecturas políticas.
+[/CRITÉRIOS]
+
+[RESPOSTA]
+A resposta final deverá ser apresentada exclusivamente em formato JSON válido, sem comentários externos, respeitando rigorosamente a estrutura abaixo:
+- Retorne APENAS um JSON válido com a estrutura exatamente como apresentado abaixo.
 
 [
-  {{"item": 1, "trecho": "texto exato do site", "classificacao": "divergente"}},
-  {{"item": 2, "trecho": "outro trecho", "classificacao": "indicio"}}
+  {{"trecho": "texto exato analisado", "classificacao": "aderente"}}, {{"trecho": "outro trecho", "classificacao": "indicio"}},
+  ...
 ]
 
-[28, 25, 2, 1]
+Após a identificação de cada trecho com ideia completa e autônoma, faça a contagem total de trechos analisados, dos trechos com
+classificação aderente e com indício de descumprimento de vedação de conduta. 
 
-Se não houver divergências ou indícios, retorne:
+Se houver indícios, retorne:
 
-[]
+[total_analisados, total_aderentes, total_indicios]
 
-[total_trechos, total_trechos, 0, 0]
+Nesse caso, o valor de total de trechos analisados tem que corresponder ao total da soma dos valores total_aderentes, total_indicios
+Exemplo de resposta: [10, 8, 2]
+
+Se não houver indícios, o valor total de trechos analisados deve corresponder ao total dos valores de total_aderentes.
+Neste caso, total_indicios deve ser igual a zero.
+Exemplo de resposta para os casos de não haver indícios = [10,10,0]
+
 
 Texto para análise:
 \"\"\"{chunk}\"\"\"
+Base Legal:
+\"\"\"{base_legal}\"\"\"
+Data de referência (dia do 1º pleito)
+\"\"\"{data_referencia}\"\"\"
 """
 
 col_titulo, col_data = st.columns(2)
@@ -108,10 +136,11 @@ if data_referencia is not None:
     st.caption(f"Data selecionada: **{data_referencia.strftime('%d/%m/%Y')}**")
 else:
     st.session_state.data_referencia = None
-    st.info("Selecione uma data de referência para ativar a análise contextualizada no período eleitoral.")
+    col_espaco, colAtivacaoDATA =st.columns(2)
+    with colAtivacaoDATA:
+        st.info("Selecione uma data de referência para ativar a análise contextualizada no período eleitoral.")
 
 st.markdown("**Compare conteúdo de notícias de sites institucionais com normas eleitorais**")
-st.divider()
 
 # Divisor visual
 st.divider()
@@ -521,33 +550,44 @@ def chunk_por_paragrafos(texto, limite):
 #  ANÁLISE COM LLM - chamada da API do Groq (ok)
 # ============================================================
 
-def analisar_com_llm(chunk: str, model: str, temperatura: float, prompt_base: str, referencia_legal: str, data_referencia: str):
+def analisar_com_llm(chunk: str,
+                     model: str,
+                     temperatura: float,
+                     prompt_personalizado: str,
+                     base_legal: str,
+                     data_referencia : str):
 
     if not chunk.strip():
-        return [], [0, 0, 0, 0]
-    prompt_completo = prompt_base.format(
+        return [], [0, 0, 0]
+
+    prompt_completo = prompt_personalizado.format(
         chunk=chunk,
-        referencia_legal=base_legal or "Nenhuma base legal fornecida.",
-        data_referencia=data_referencia,
+        base_legal=base_legal,
+        data_referencia=data_referencia
     )
 
     try:
+        messages = [
+            ChatCompletionUserMessageParam(role="user", content=prompt_completo)
+        ]
+
         response = client.chat.completions.create(
             model=model,
-            messages=[{"role": "user", "content": prompt_completo}],
+            messages=messages,
             temperature=temperatura,
             max_completion_tokens=1024
         )
+
         content = response.choices[0].message.content.strip()
         # print(content)
 
         # === Extração da lista de contagem ===
-        contagem = [0, 0, 0, 0]
-        match = re.search(r'\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]', content)
+        contagem = [0, 0, 0]
+        match = re.search(r'\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*]', content)
         if match:
             contagem = [int(match.group(i)) for i in range(1, 5)]
         trechos = []
-        json_match = re.search(r'\[\s*\{.*?\}\s*\]', content, re.DOTALL)
+        json_match = re.search(r'\[\s*\{.*?\s*', content, re.DOTALL)
         if json_match:
             try:
                 data = json.loads(json_match.group(0))
@@ -570,7 +610,7 @@ def analisar_com_llm(chunk: str, model: str, temperatura: float, prompt_base: st
 
     except Exception as e:
         st.warning(f"Erro na chamada ao LLM: {e}")
-        return [], [0, 0, 0, 0]
+        return [], [0, 0, 0]
 
 
 # ========================================================================================
@@ -603,7 +643,6 @@ if analisar:
 
             total_trechos_global = 0
             aderentes_global = 0
-            divergentes_global = 0
             indicios_global = 0
             # textos_completos = []
             trechos_divergentes = []
@@ -628,8 +667,7 @@ if analisar:
 
                             total_trechos_global += lista_contagem[0]
                             aderentes_global += lista_contagem[1]
-                            divergentes_global += lista_contagem[2]
-                            indicios_global += lista_contagem[3]
+                            indicios_global += lista_contagem[2]
 
             # Calcula percentual de aderência da URL
             if total_trechos_global == 0:
@@ -685,7 +723,7 @@ if resultados_para_plot:
             valores = df_result["Aderencia (%)"].astype(float).clip(0, 100)
 
             # Cores por gradiente
-            cores = plt.cm.viridis(valores / 100.0)
+            cores = plt.colormaps['viridis'](valores / 100.0)
 
             bars = ax.bar(sites, valores, color=cores, edgecolor='blue', linewidth=0.8)
 

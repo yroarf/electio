@@ -16,7 +16,6 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.base_models import InputFormat
 from groq.types.chat import ChatCompletionUserMessageParam
 
-from rascunho import extrair_subdominio_gov
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -759,3 +758,4 @@ if resultados_para_plot:
 # Rodapé
 st.markdown("---")
 st.caption("Analisador de Aderência | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+

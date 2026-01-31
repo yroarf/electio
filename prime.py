@@ -10,19 +10,15 @@ from bs4 import BeautifulSoup
 import json
 import matplotlib.pyplot as plt
 import re
-import tempfile
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.datamodel.base_models import InputFormat
 from groq.types.chat import ChatCompletionUserMessageParam
-
+from datetime import datetime, date
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 # ========================= CONFIGURAÇÃO PÁGINA =========================
 
 st.set_page_config(
-    page_title=" Analisador de Aderência",
+    page_title=" Analisador de Conformidade",
     page_icon="🗳️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -55,71 +51,9 @@ LISTA_1 = [
     '/webmail', '/galeria', '/simbolos'
           ]
 
-# ======================= PROMPT DE ANÁLISE =============
-
-if "data_referencia" not in st.session_state:
-    st.session_state.data_referencia = []
-if "base_legal" not in st.session_state:
-    st.session_state.base_legal = []
-
-prompt_padrao = """
-[PERSONA]
-Você é um jurista especializado em compliance, com larga experiência em Direito Administrativo, Direito Eleitoral e ética na Administração Pública Federal.
-Atue de forma técnica, objetiva, fundamentada e neutra, sem emitir juízos políticos ou valorativos.
-[/PERSONA]
-
-[CONTEXTO]
-Durante o período eleitoral, é essencial que a Administração Pública observe rigorosamente as normas legais e éticas aplicáveis às comunicações institucionais.
-
-Para fins desta análise de compliance, são considerados, exclusivamente o conteúdo da ({base_legal}) e da data do pleito ({data_referencia})
-
-[FLUXO]
-Siga rigorosamente a sequência abaixo, sem pular etapas:
-
-1. Analise o conteúdo textual de cada trecho, considerando exclusivamente a base legal ({base_legal}).
-2. As análises são feitas individualmente para cada trecho extraído da URL, seguindo os CRITÉRIOS indicados.
-
-[CRITÉRIOS]
-- Considere como "trecho significativo" toda frase ou parágrafo que contenha uma ideia completa e autônoma.
-- Avalie cada trecho quanto à sua aderência à base legal, considerando as vedações de conduta durante o defeso eleitoral .
-- A análise deve ser estritamente jurídica e normativa, sem conjecturas políticas.
-[/CRITÉRIOS]
-
-[RESPOSTA]
-A resposta final deverá ser apresentada exclusivamente em formato JSON válido, sem comentários externos, respeitando rigorosamente a estrutura abaixo:
-- Retorne APENAS um JSON válido com a estrutura exatamente como apresentado abaixo.
-
-[
-  {{"trecho": "texto exato analisado", "classificacao": "aderente"}}, {{"trecho": "outro trecho", "classificacao": "indicio"}},
-  ...
-]
-
-Após a identificação de cada trecho com ideia completa e autônoma, faça a contagem total de trechos analisados, dos trechos com
-classificação aderente e com indício de descumprimento de vedação de conduta. 
-
-Se houver indícios, retorne:
-
-[total_analisados, total_aderentes, total_indicios]
-
-Nesse caso, o valor de total de trechos analisados tem que corresponder ao total da soma dos valores total_aderentes, total_indicios
-Exemplo de resposta: [10, 8, 2]
-
-Se não houver indícios, o valor total de trechos analisados deve corresponder ao total dos valores de total_aderentes.
-Neste caso, total_indicios deve ser igual a zero.
-Exemplo de resposta para os casos de não haver indícios = [10,10,0]
-
-
-Texto para análise:
-\"\"\"{chunk}\"\"\"
-Base Legal:
-\"\"\"{base_legal}\"\"\"
-Data de referência (dia do 1º pleito)
-\"\"\"{data_referencia}\"\"\"
-"""
-
 col_titulo, col_data = st.columns(2)
 with col_titulo:
-    st.title("🗳️ Analisador de Aderência")
+    st.title("🗳️ Analisador de Conformidade de Conduta")
 with col_data:
     st.markdown("**Data de referência**")
     data_referencia = st.date_input(
@@ -141,7 +75,6 @@ else:
 
 st.markdown("**Compare conteúdo de notícias de sites institucionais com normas eleitorais**")
 
-# Divisor visual
 st.divider()
 
 # ========================================================================================
@@ -180,8 +113,8 @@ with st.expander("🌐 sites", expanded=False):
     with col1:
         nova_url = st.text_input(
             "URL do site (ex: https://www.municipio.uf.gov.br/noticias)",
-            placeholder="https://www.exemplo.go.gov.br/noticias",
-            help="Página principal de notícias ou comunicados do município."
+            placeholder="https://www.exemplo.go.gov.br/noticias -* https:// *- é mandatório",
+            help="Página principal de notícias ou comunicados da administração pública."
         )
 
     if st.button("Adicionar Site", type="primary"):
@@ -225,7 +158,7 @@ with st.expander("🌐 sites", expanded=False):
                 ),
                 "Nome do Site": st.column_config.TextColumn(
                     "Nome do Site",
-                    required=True,
+                    required=False,
                     help="Nome amigável para exibição"
                 )
             },
@@ -244,136 +177,170 @@ with st.expander("🌐 sites", expanded=False):
         st.caption(f"Total de sites: **{len(st.session_state.sites_df)}**")
 
 
+# ==========================================================================##
+#  ---------------------- INÍCIO BASE LEGAL ---------------------------------
+
+
+@st.cache_data(ttl=3600)
+def resumir_base_legal(base_legal: str, data_referencia: str, model: str) -> str:
+    if not base_legal.strip():
+        return "Nenhuma base legal fornecida."
+
+    prompt_base_legal = f"""
+    Você é um jurista especializado em Direito Eleitoral.
+
+    Dada a base legal completa abaixo e considerando a data de referência do pleito \"\"\"{data_referencia}\"\"\",
+
+    Gere um RESUMO ESTRUTURADO, Denso e Hierárquico contendo APENAS as vedações, proibições e condutas permitidas/restritas aos
+    agentes públicos no período eleitoral (foco nos 3–6 meses anteriores ao pleito, propaganda institucional,
+    uso de bens públicos, etc.).
+
+    Estrutura obrigatória do resumo (use exatamente este formato markdown para facilitar parsing):
+    - **Vedações principais** (liste com bullets numerados ou -)
+    - **Período de incidência** (datas relativas à eleição)
+    - **Exceções e condutas permitidas**
+    - **Sanções típicas** (breve)
+
+    Seja o mais objetivo, completo e fiel possível ao texto original, mas elimine redundâncias e linguagem prolixa.
+
+    Base legal completa:
+    \"\"\"{base_legal}\"\"\"
+
+    Responda APENAS com o resumo estruturado, sem introdução nem conclusão.
+    """
+    messages = [ChatCompletionUserMessageParam(role="user", content=base_legal)]
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.1,  # baixa criatividade para fidelidade
+            max_tokens=1000
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        st.warning(f"Erro ao resumir base legal: {e}")
+        return base_legal[:8000] + " [resumo truncado devido a erro]"
+
+
+#  ----------------- FIM PROCESSAMENTO PROMPT BASE LEGAL ---------------------
+# ==========================================================================##
+
+if "conteudo_base_legal" not in st.session_state:
+    st.session_state.conteudo_base_legal = ""
+
 st.markdown("### **Base Legal**")
 with st.expander("📋 Base Legal", expanded=False):
-    st.markdown("Defina o texto de referência legal que será usado na análise de aderência pelo LLM.")
+    st.markdown("Defina o texto de referência legal que será usado na análise de conformidade pelo LLM.")
 
-    # Abas para separar as funcionalidades
-    tab_txt, tab_pdf_converter = st.tabs(
-        [" Referência em TXT (até 5 arquivos)", " Conversor PDF → TXT (ferramenta isolada)"])
+    # Carregar múltiplos TXT como referência
 
-    # ===============================================
-    # ABA 1: Carregar múltiplos TXT como referência
-    # ===============================================
-    with tab_txt:
-        st.markdown("### Upload arquivos .txt")
-        st.markdown("**Carregue até 5 arquivos .txt** com trechos da lei, resolução, portaria, cartilha etc.")
+    st.markdown("### Upload arquivos .txt")
+    st.markdown("**Carregue até 2 arquivos .txt** com trechos da lei, resolução, portaria, cartilha etc.")
 
-        uploaded_txt_files = st.file_uploader(
-            "Selecione arquivos TXT",
-            type=["txt"],
-            accept_multiple_files=True,
-            key="txt_referencia_multi",
-            help="Máximo de 5 arquivos. Todos serão combinados em um único texto para a análise."
-        )
+    uploaded_txt_files = st.file_uploader(
+        "Selecione arquivos TXT",
+        type=["txt"],
+        accept_multiple_files=True,
+        key="txt_referencia_multi",
+        help="Máximo de 2 arquivos. Todos serão combinados em um único texto para a análise."
+    )
 
-        texto_referencia = ""
+    conteudo_base_legal_referencia = "" #declara como str
 
-        if uploaded_txt_files:
-            if len(uploaded_txt_files) > 5:
-                st.error("Limite máximo: 5 arquivos TXT.")
-                uploaded_txt_files = uploaded_txt_files[:5]
+    if uploaded_txt_files:
+        if len(uploaded_txt_files) > 2:
+            st.error("Limite máximo: 2 arquivos TXT.")
+            uploaded_txt_files = uploaded_txt_files[:2]
 
-            textos_carregados = []
-            for file in uploaded_txt_files:
-                try:
-                    content = file.read().decode("utf-8")
-                    textos_carregados.append(f"\n\n=== Conteúdo de: {file.name} ===\n{content}")
-                except Exception as e:
-                    st.warning(f"Erro ao ler {file.name}: {e}")
+        textos_carregados = []
+        for file in uploaded_txt_files:
+            try:
+                content = file.read().decode("utf-8")
+                # junta os conteúdo para formar a base legal
+                textos_carregados.append(f"\n\n=== Conteúdo de: {file.name} ===\n{content}") #lista de conteúdos
+            except Exception as e:
+                st.warning(f"Erro ao ler {file.name}: {e}")
 
-            if textos_carregados:
-                texto_referencia = "\n".join(textos_carregados)
-                st.success(f"{len(textos_carregados)} arquivo(s) TXT carregado(s) com sucesso.")
-                st.caption(f"Total de caracteres: {len(texto_referencia):,}")
+        if textos_carregados:
+            conteudo_base_legal_referencia = "\n".join(textos_carregados) #transfoma a lista textos_carregados em um só conteúdo
+            st.success(f"{len(textos_carregados)} arquivo(s) TXT carregado(s) com sucesso.")
+            st.caption(f"Total de caracteres: {len(conteudo_base_legal_referencia):,}")
 
         # Campo opcional para texto manual
         st.markdown("**Ou cole texto diretamente (opcional)**")
         texto_manual = st.text_area(
-            "Texto adicional ou complementar",
+            "Texto adicional ou complementar.",
             height=150,
-            placeholder="Cole aqui trechos específicos, artigos isolados etc."
+            placeholder="Cole aqui trechos específicos de julgados, artigos, doutrina etc."
         )
 
         # Texto final consolidado para a LLM
-        referencia_final = texto_referencia
-        if texto_manual.strip():
-            referencia_final += "\n\n" + texto_manual.strip() #adiciona o texto inserido no text_area
+        conteudo_base_legal_referencia = "\n".join(textos_carregados) if textos_carregados else ""
+        st.session_state.conteudo_base_legal = conteudo_base_legal_referencia
 
-        if not referencia_final.strip():
+        if texto_manual.strip():
+            st.session_state.conteudo_base_legal += "\n\n" + texto_manual.strip()
+
+        if not st.session_state.conteudo_base_legal.strip():
             st.warning("Nenhum texto de referência carregado ainda.")
         else:
             st.info("Texto de referência pronto para uso na análise.")
 
-    # ===============================================
-    # ABA 2: Conversor isolado PDF → TXT
-    # ===============================================
-    with tab_pdf_converter:
-        st.markdown("### 🔄 Ferramenta Isolada: Converter PDF para TXT")
-        st.info(
-            "Esta ferramenta **não afeta** a base legal principal. Ela apenas converte um PDF em TXT para download.")
 
-        pdf_file = st.file_uploader(
-            "Faça upload do PDF para conversão",
-            type=["pdf"],
-            key="pdf_converter_isolado"
-        )
+prompt_padrao = """[PERSONA]
+Você é um jurista especializado em compliance, com larga experiência em Direito Administrativo, Direito Eleitoral e 
+ética na Administração Pública Federal.
 
-        nome_arquivo_saida = st.text_input(
-            "Nome do arquivo TXT de saída (sem extensão)",
-            value="texto_extraido_pdf",
-            help="O arquivo será salvo como 'nome.txt'"
-        )
+Atue de forma técnica, objetiva, fundamentada e neutra, sem emitir juízos políticos ou valorativos.
+[/PERSONA]
 
-        if pdf_file and st.button("Converter PDF para TXT", type="secondary"):
-            with st.spinner("Convertendo PDF para texto..."):
-                try:
-                    opts = PdfPipelineOptions(do_ocr=False, do_table_structure=True)
-                    converter = DocumentConverter(
-                        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
-                    )
+[CONTEXTO]
+Durante o período eleitoral, é essencial que a Administração Pública observe rigorosamente as normas legais e éticas aplicáveis
+às comunicações institucionais, bem como as condutas que são vedadas por lei, regulamento, norma etc.
 
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                        tmp_file.write(pdf_file.getvalue())
-                        tmp_path = tmp_file.name
+Para fins desta análise de conformidade, são considerados, EXCLUSIVAMENTE: 
+1 - O texto passado pelo usuário por meio da variável "texto";
+2 - a data do pleito passada por meio da variável "data_referencia"; e 
+3 - O RESUMO PRÉVIO DA BASE LEGAL
 
-                    result = converter.convert(tmp_path)
-                    os.unlink(tmp_path)
+[FLUXO]
+Com base no texto, execute rigorosamente as seguintes etapas: 
+1 - Divida o texto abaixo em trechos significativos (frases ou parágrafos com ideia completa e autônoma).
+2 - Analise a conformidade de cada trecho com relação ao RESUMO PRÉVIO DA BASE LEGAL.
+3 - Monte um JSON com a estrutura exata:
+{{
+  "analises": [
+    {{"trecho": "texto exato analisado", "classificacao": "conforme"}},
+    {{"trecho": "outro trecho", "classificacao": "indicio"}}
+  ],
+  "totais": [total_analisados, total_conformes, total_indicios]
+}}
 
-                    textos = [t["text"] for t in result.document.export_to_dict().get("texts", [])]
-                    texto_convertido = "\n".join(textos)
+Texto para análise:
+\"\"\"{texto}\"\"\"
 
-                    st.success("Conversão concluída!")
+Data de referência (dia do 1º pleito):
+\"\"\"{data_referencia}\"\"\"
+"""
 
-                    # Download do TXT
-                    nome_final = f"{nome_arquivo_saida.strip()}.txt"
-                    st.download_button(
-                        label="📥 Baixar arquivo TXT",
-                        data=texto_convertido.encode("utf-8"),
-                        file_name=nome_final,
-                        mime="text/plain"
-                    )
-
-                    st.caption(f"Caracteres extraídos: {len(texto_convertido):,}")
-
-                except Exception as e:
-                    st.error(f"Erro na conversão: {str(e)}")
+#  ----------------- FIM PROCESSAMENTO PROMPT PADRÃO  ------------------------
+# ==========================================================================##
 
 st.markdown("### **Prompt**" )
 with st.expander("🧠 Prompt", expanded=False):
 
     st.markdown("#### Prompt para Análise")
+
+    if "prompt_reset" not in st.session_state:
+        st.session_state.prompt_reset = 0
+
     prompt_personalizado = st.text_area(
         "Edite o prompt que será enviado ao modelo",
-        value=prompt_padrao,
+        value=prompt_padrao, # a variável prompt_personalizado recebe o conteúdo do prompt_padrao, alterado ou não
         height=350,
-        key="prompt_editor"
+        key=f"prompt_editor_{st.session_state.prompt_reset}"
     )
-
-    # Variável global para uso na análise
-
-base_legal = referencia_final if 'referencia_final' in locals() else ""
-
 
 st.divider()
 
@@ -393,66 +360,75 @@ with st.expander("🤖 **Configurações do Modelo de IA**", expanded=False):
     with col_model2:
         max_links = st.slider("Número máximo de LINKS por URL", 1, 20, 5, help="Quantos links internos seguir por site")
 
-    col_chunk, col_temperatura = st.columns(2)
+    col_temperatura, col_chunk = st.columns(2)
     with col_chunk:
-        max_chunks = st.slider("Número máximo de CHUNKS por URL", 1, 2000, 100,
-                               help="Chunks maiores = análise mais profunda, mas mais lenta")
+        ""
     with col_temperatura:
         temperatura = st.slider("Temperatura (criatividade)", 0.0, 2.0, 0.7, 0.1, help="O valor 0.0 é determinístico")
 
 st.divider()
+
+# ========================================================================================
+#                      PROCESSAMENTO DA BASE LEGAL PELA IA DO GROQ
+# ========================================================================================
+
+resumir_base_legal(
+    base_legal=st.session_state.conteudo_base_legal,
+    data_referencia=data_referencia.strftime('%d/%m/%Y') if data_referencia else "não informada",
+    model=modeloIA
+)
 
 # ============================================================
 #  COLETA DE LINKS DO SITE (ok)
 # ============================================================
 
 def coletar_links_internos(url: str, max_links) -> set:
-    # downloaded = trafilatura.fetch_url(url, output_format="raw", no_fallback=False)
-    downloaded = trafilatura.fetch_url(url)
+    downloaded = trafilatura.fetch_url(url)  # web scraping
     if not downloaded:
         return {url}
-
     try:
-        tree = html.fromstring(downloaded)
+        tree = html.fromstring(downloaded) # converte em uma árvore de dados hierárquicos
     except Exception:
         return {url}
 
-    dominio = urlparse(url).netloc
+    dominio = urlparse(url).netloc # extrai a parte da rede de uma URL
     links_validos = {url}
 
-    for href in tree.xpath("//a/@href"):
+    #Loop para interar sobre todos os atributos href das tags de âncora (<a>) do tree.
+    for href in tree.xpath("//a/@href"): #
         full = urljoin(url, href.strip())
         parsed = urlparse(full)
 
-        if parsed.netloc != dominio:
-            continue
+        if parsed.netloc != dominio: # Verifica se o domínio da URL extraída é o mesmo que o domínio da página original
+            continue                 # se for diferente, ignora o link e não coleta o link externo.
 
         path = parsed.path.lower()
 
-        if any(block in path for block in LISTA_1):
+        if any(block in path for block in LISTA_1): # se verdadeiro ignora e não coleta o link
             continue
 
-        if re.search(r'\.(pdf|jpg|jpeg|png|gif|zip|docx?|xlsx?)$', path):
+        if re.search(r'\.(pdf|jpg|jpeg|png|gif|zip|docx?|xlsx?)$', path): # se verdadeiro ignora e não coleta o link
             continue
 
         links_validos.add(full)
-        # print(max_links)
+
         if len(links_validos) >= max_links:
             break
-    # print(links_validos)
+
     return links_validos
 
 # ============================================================
 #             EXTRAÇÃO DE TEXTO     (ok)
 # ============================================================
 
-def extrair_texto(url: str) -> str:
+@st.cache_data(ttl=3600)
+def extrair_texto(url_noticia: str) -> str:
     # 1. BAIXA HTML BRUTO — ESSENCIAL (ok)
 
-    downloaded = trafilatura.fetch_url(url)
+    downloaded_noticia = trafilatura.fetch_url(url_noticia)
 
-    if not downloaded:
-        print(f"[ERRO] Falha ao baixar HTML bruto: {url}")
+    if not downloaded_noticia:
+        print(f"[ERRO] Falha ao baixar HTML bruto: {url_noticia}")
         return ""
 
     texto_final = None
@@ -460,33 +436,33 @@ def extrair_texto(url: str) -> str:
     # 2. PRIMEIRA TENTATIVA — Trafilatura com máximo recall
 
     try:
-        text = trafilatura.extract(
-            downloaded,
+        text_noticia = trafilatura.extract(
+            downloaded_noticia,
             include_comments=False,
             include_images=False,
-            include_tables=True,
+            include_tables=False,
             deduplicate=True,
             favor_recall=True,
-            favor_precision=False,
+            favor_precision=True,
             no_fallback=False,
             include_formatting=False
         )
 
-        if text and len(text.strip()) > 150:
-            texto_final = text
+        if text_noticia and len(text_noticia.strip()) > 100:
+            texto_final = text_noticia # retorna uma str
         else:
-            print(f"[WARN] Extração Trafilatura baixa em {url}")
+            print(f"[WARN] Extração Trafilatura baixa em {url_noticia}")
 
     except Exception as e:
-        print(f"[ERRO Trafilatura] {url}: {e}")
+        print(f"[ERRO Trafilatura] {url_noticia}: {e}")
 
     # 3. FALLBACK 1 — html2txt (Trafilatura modo bruto)
 
     if not texto_final:
         try:
-            print(f"[FALLBACK] html2txt ativado para {url}")
-            raw_text = html2txt(downloaded)
-            if raw_text and len(raw_text.strip()) > 100:
+            print(f"[FALLBACK] html2txt ativado para {url_noticia}")
+            raw_text = html2txt(downloaded_noticia)
+            if raw_text and len(raw_text.strip()) > 200:
                 texto_final = raw_text
         except:
             pass
@@ -495,22 +471,22 @@ def extrair_texto(url: str) -> str:
 
     if not texto_final:
         try:
-            print(f"[FALLBACK] BeautifulSoup ativado para {url}")
-            soup = BeautifulSoup(downloaded, "lxml")
+            print(f"[FALLBACK] BeautifulSoup ativado para {url_noticia}")
+            bs_noticia = BeautifulSoup(downloaded_noticia, "lxml")
 
             # Remove scripts, styles etc.
-            for tag in soup(["script", "style", "noscript"]):
+            for tag in bs_noticia(["script", "style", "noscript"]):
                 tag.extract()
 
-            bs_text = soup.get_text(separator="\n")
+            bs_text = bs_noticia.get_text(separator="\n")
             if bs_text and len(bs_text.strip()) > 80:
                 texto_final = bs_text
 
         except Exception as e:
-            print(f"[ERRO BS4] {url}: {e}")
+            print(f"[ERRO BS4] {url_noticia}: {e}")
 
     if not texto_final:
-        print(f"[ERRO] Nenhum método conseguiu extrair texto de {url}")
+        print(f"[ERRO] Nenhum método conseguiu extrair texto de {url_noticia}")
         return ""
 
     # print("texto extração")
@@ -520,51 +496,36 @@ def extrair_texto(url: str) -> str:
 
 
 # ============================================================
-#  CHUNKING POR PARÁGRAFOS (ok)
-# ============================================================
-
-def chunk_por_paragrafos(texto, limite):
-    """
-    Divide texto em blocos por parágrafos, evitando cortar frases pela metade.
-    """
-    paragrafos = texto.split("\n")
-    buffer = ""
-    chunks = []
-
-    for p in paragrafos:
-        if len(buffer) + len(p) < limite:
-            buffer += p + "\n"
-        else:
-            chunks.append(buffer)
-            buffer = p + "\n"
-
-    if buffer.strip():
-        chunks.append(buffer)
-    # print("chunks            _____________________")
-    # print(chunks)
-    return chunks
-
-
-# ============================================================
 #  ANÁLISE COM LLM - chamada da API do Groq (ok)
 # ============================================================
 
-def analisar_com_llm(chunk: str,
+def analisar_com_llm(texto: str,
                      model: str,
                      temperatura: float,
                      prompt_personalizado: str,
-                     base_legal: str,
-                     data_referencia : str):
-
-    if not chunk.strip():
+                     data_referencia):
+    if not texto.strip():
         return [], [0, 0, 0]
 
-    prompt_completo = prompt_personalizado.format(
-        chunk=chunk,
-        base_legal=base_legal,
-        data_referencia=data_referencia
-    )
+    if data_referencia is not None:
+        try:
+            data_ref_str = data_referencia.strftime('%d/%m/%Y')
+        except AttributeError:
+            data_ref_str = str(data_referencia) or "não informada"
+    else:
+        data_ref_str = "não informada"
 
+    try:
+        prompt_completo = prompt_personalizado.format(
+            texto=texto,
+            data_referencia=data_ref_str
+        )
+
+    except KeyError as e:
+        prompt_completo = prompt_personalizado.replace('{texto}', texto).replace('{data_referencia}', data_ref_str)
+        if '{texto}' in prompt_completo or '{data_referencia}' in prompt_completo:
+            st.error("O prompt personalizado não contém os placeholders necessários: {texto} e {data_referencia}.")
+            return [], [0, 0, 0]
     try:
         messages = [
             ChatCompletionUserMessageParam(role="user", content=prompt_completo)
@@ -574,27 +535,27 @@ def analisar_com_llm(chunk: str,
             model=model,
             messages=messages,
             temperature=temperatura,
-            max_completion_tokens=1024
+            max_tokens=500
         )
 
         content = response.choices[0].message.content.strip()
-        # print(content)
+        print(content)
 
         # === Extração da lista de contagem ===
         contagem = [0, 0, 0]
-        match = re.search(r'\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*]', content)
+        match = re.search(r'\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*]', content)
         if match:
-            contagem = [int(match.group(i)) for i in range(1, 5)]
+            contagem = [int(match.group(i)) for i in range(1, 4)]
         trechos = []
-        json_match = re.search(r'\[\s*\{.*?\s*', content, re.DOTALL)
+        json_match = re.search(r'\[\s*\{.*?\}\s*\]', content, re.DOTALL)
         if json_match:
             try:
                 data = json.loads(json_match.group(0))
 
                 if isinstance(data, list):
                     for item in data:
-                        trecho = item.get("trecho") or item.get("texto") or item.get("Trecho")
-                        classificacao = item.get("classificacao") or item.get("classificação") or item.get("tipo")
+                        trecho = item.get("trecho")
+                        classificacao = item.get("classificacao")
 
                         if trecho:
                             trechos.append({
@@ -616,7 +577,6 @@ def analisar_com_llm(chunk: str,
 #                                    ANÁLISE DOS SITES
 # ========================================================================================
 
-
 if "resultados" not in st.session_state:
     st.session_state.resultados = []
 
@@ -629,8 +589,7 @@ if analisar:
         st.error("Adicione pelo menos um site antes de analisar.")
     else:
         sites = st.session_state.sites_df.to_dict("records")  # ok
-        # print(sites)
-        resultados = []
+        resultados_analise_llm = []
         progress_bar = st.progress(0)
         status_text = st.empty()
         # print(sites)
@@ -641,55 +600,51 @@ if analisar:
             links = coletar_links_internos(url, max_links=max_links)
 
             total_trechos_global = 0
-            aderentes_global = 0
+            conformes_global = 0
             indicios_global = 0
-            # textos_completos = []
-            trechos_divergentes = []
+            trechos_indicio = []
+
             # print(links)
             for link in links:
                 texto = extrair_texto(link)
-                if texto and len(texto.split()) > 10:  # Busca detalhada até o nível de frases.
-                    chunks = chunk_por_paragrafos(texto, limite=max_chunks)
-                    # print(chunks)
-                    for chunk in chunks:
-                        if chunk.strip():
-                            trecho_divergente, lista_contagem = analisar_com_llm(
-                                chunk,
+                if texto:  # verifica se o texto existe
+                    trechos_indicio, lista_contagem = analisar_com_llm(
+                                texto,
                                 modeloIA,
                                 temperatura,
                                 prompt_personalizado,
-                                base_legal,
                                 data_referencia=st.session_state.get("data_referencia"))
 
-                            if trecho_divergente:
-                                trechos_divergentes.extend(trecho_divergente)
+                    if trechos_indicio:
+                        trechos_indicio.extend(trechos_indicio)
+                    if lista_contagem:
+                        total_trechos_global += lista_contagem[0]
+                        conformes_global += lista_contagem[1]
+                        indicios_global += lista_contagem[2]
 
-                            total_trechos_global += lista_contagem[0]
-                            aderentes_global += lista_contagem[1]
-                            indicios_global += lista_contagem[2]
-
-            # Calcula percentual de aderência da URL
+            # Calcula percentual de indicio da URL
             if total_trechos_global == 0:
-                percAderencia = 0.0
+                percIndicio = 0.0
             else:
-                percAderencia = round((aderentes_global / total_trechos_global) * 100, 1)
+                percIndicio = round((indicios_global / total_trechos_global) * 100, 1)
 
-            resultados.append({
+            resultados_analise_llm.append({
 
                 "url": url,
-                "aderencia": percAderencia,
+                "indicio": percIndicio,
                 "total_trechos": total_trechos_global,
-                "aderentes": aderentes_global,
-                "trechos divergentes": [trechos_divergentes]
+                "conformes": conformes_global,
+                "indicios": indicios_global,
+                "trechos indicio": trechos_indicio,
 
             })
-            print(resultados)
+            print(resultados_analise_llm)
 
             progress_bar.progress((idx + 1) / len(sites))
 
         status_text.empty()
         progress_bar.empty()
-        st.session_state.resultados = resultados
+        st.session_state.resultados = resultados_analise_llm
 
 # =====================================================================
 # ========================= GRÁFICO DE BARRAS =========================
@@ -705,12 +660,61 @@ if resultados_para_plot:
 
     df_result = pd.DataFrame({
         "Site": [nome_grafico(r.get("url", "")) for r in resultados_para_plot],
-        "Aderencia (%)": [float(r.get("aderencia", 0.0)) for r in resultados_para_plot]
+        "Indicio (%)": [float(r.get("indicio", 0.0)) for r in resultados_para_plot]
     })
     print('df_result')
     print(df_result)
     # Remove entradas vazias (defensivo)
-    df_result = df_result.dropna(subset=["Site", "Aderencia (%)"])
+    df_result = df_result.dropna(subset=["Site", "Indicio (%)"])
+
+    todos_trechos_indicio = []
+
+    for resultado in resultados_para_plot:
+        url = resultado.get("url", "—")
+        nome_site = nome_grafico(url)
+        trechos = resultado.get("trechos indicio", [])  # sua chave atual
+
+        for t in trechos:
+            if isinstance(t, dict) and t.get("classificacao", "").lower() in ["indicio", "indício"]:
+                todos_trechos_indicio.append({
+                    "Site": nome_site,
+                    "Trecho": t.get("trecho", "").strip(),
+                    "Classificação": t.get("classificacao", "indicio"),
+                    "URL original": url
+                })
+
+    if todos_trechos_indicio:
+        df_indicios = pd.DataFrame(todos_trechos_indicio)
+
+        st.divider()
+        st.subheader("🟥 Trechos identificados como possível indício de conduta vedada")
+
+        # Exibe a tabela interativa (com filtro, ordenação, etc.)
+        st.dataframe(
+            df_indicios,
+            column_config={
+                "Site": st.column_config.TextColumn("Site", width="medium"),
+                "Trecho": st.column_config.TextColumn("Trecho identificado", width="large"),
+                "Classificação": st.column_config.TextColumn("Classif.", width="small"),
+                "URL original": st.column_config.LinkColumn("URL", width="medium", display_text=r"https?://(.+)")
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+
+        # Opcional: contador rápido
+        st.caption(f"Total de trechos com indício: **{len(df_indicios)}**")
+
+        # Botão para baixar CSV
+        csv = df_indicios.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Baixar tabela como CSV",
+            data=csv,
+            file_name="trechos_indicio.csv",
+            mime="text/csv"
+        )
+    else:
+        st.info("Nenhum trecho classificado como 'indício' foi encontrado na análise.")
 
     if not df_result.empty:
         col_esq, col_centro, col_dir = st.columns([1, 2, 1])
@@ -719,7 +723,7 @@ if resultados_para_plot:
             fig, ax = plt.subplots(figsize=(10, 5))
 
             sites = df_result["Site"]
-            valores = df_result["Aderencia (%)"].astype(float).clip(0, 100)
+            valores = df_result["Indicio (%)"].astype(float).clip(0, 100)
 
             # Cores por gradiente
             cores = plt.colormaps['viridis'](valores / 100.0)
@@ -740,8 +744,8 @@ if resultados_para_plot:
                 )
 
             ax.set_xlabel("")
-            ax.set_ylabel("Aderência (%)", fontsize=10)
-            ax.set_title(" 📊 Grau Aderência", fontsize=10, pad=20)
+            ax.set_ylabel("Indício (%)", fontsize=10)
+            ax.set_title(" 📊 Grau de Indício", fontsize=10, pad=20)
 
             ax.tick_params(axis='x', labelsize=8, rotation=45)
             ax.tick_params(axis='y', labelsize=8)
@@ -757,5 +761,4 @@ if resultados_para_plot:
 
 # Rodapé
 st.markdown("---")
-st.caption("Analisador de Aderência | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
-
+st.caption("Analisador de Conformidade de Conduta Vedada | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")

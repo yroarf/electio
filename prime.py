@@ -314,16 +314,16 @@ with st.expander("📋 Base Legal", expanded=False):
                 st.session_state.conteudo_base_legal += "\n\n" + texto_manual.strip()
             st.info("Texto de referência pronto.")
 
-            if st.button("Gerar Resumo da Base Legal"):
-                with st.spinner("Resumindo base legal..."):
+            if st.button("Gerar Análise da Base Legal"):
+                with st.spinner("Analisando a base legal..."):
                     resumo = resumir_base_legal(
                         st.session_state.conteudo_base_legal,
                         st.session_state.data_referencia.strftime('%d/%m/%Y') if st.session_state.data_referencia else "não informada",
                         modeloIA
                     )
                     st.session_state.resumo_base_legal = resumo
-                    st.success("Resumo gerado!")
-                    st.markdown("**Resumo gerado:**")
+                    st.success("Análise gerada!")
+                    st.markdown("**Análise gerada:**")
                     st.markdown(resumo)
 
         # print(conteudo_base_legal_referencia)
@@ -539,7 +539,6 @@ def extrair_texto(url_noticia: str) -> str:
 
     return texto_final
 
-##### Esse trecho foi mantido para eventuais testes de raspagem feitos de forma mais crua.
 # def extrair_texto(url: str) -> str:
 #     # Baixa o HTML bruto
 #     html = trafilatura.fetch_url(url)

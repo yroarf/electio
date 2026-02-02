@@ -221,9 +221,11 @@ def resumir_base_legal(base_legal: str, data_referencia: str, modeloIA: str) -> 
 
     Dada a base legal completa abaixo e considerando a data de referência do pleito \"\"\"{data_referencia}\"\"\",
 
-    Gere um RESUMO ESTRUTURADO, Denso e Hierárquico contendo APENAS as vedações, proibições e condutas permitidas/restritas aos
-    agentes públicos no período eleitoral (foco nos 3–6 meses anteriores ao pleito, propaganda institucional,
-    uso de bens públicos, etc.).
+    Gere uma análise ESTRUTURADO, Denso e Hierárquico contendo APENAS as vedações, proibições e condutas permitidas/restritas aos
+    agentes públicos no período eleitoral.
+    
+    ** Considere rigorosamente as condutas vedadas em função das datas de 6 e 3 meses que antecedem o pleito, pois, 
+    há vedações como propaganda institucional, uso de bens públicos, etc, que dependem da data_referencia.
 
     Estrutura obrigatória do resumo (use exatamente este formato markdown para facilitar parsing):
     - **Vedações principais** (liste com bullets numerados ou -)
@@ -231,12 +233,15 @@ def resumir_base_legal(base_legal: str, data_referencia: str, modeloIA: str) -> 
     - **Exceções e condutas permitidas**
     - **Sanções típicas** (breve)
 
-    Seja o mais objetivo, completo e o mais fiel possível ao texto original, mas elimine redundâncias e linguagem prolixa.
+    A análise não deve prejudicar a compreensão do conteúdo legal, por isso, além de completo, deve ser
+     o mais fiel possível ao texto original, mas eliminando redundâncias e linguagem prolixa.
+     
+    Deixe bem claras as vedações correspondentes aos prazos de 3 e 6 meses que antecedem o pleito (data_referencia).
 
     Base legal completa:
     \"\"\"{base_legal}\"\"\"
 
-    Responda APENAS com o resumo estruturado, sem introdução nem conclusão.
+    Responda APENAS com o documento da análise estruturada, sem introdução nem conclusão.
     """
     messages = [ChatCompletionUserMessageParam(role="user", content=base_legal)]
 
@@ -333,20 +338,49 @@ with st.expander("📋 Base Legal", expanded=False):
 
 
 prompt_padrao = """
-Você é um jurista especializado em Direito Eleitoral.
+Você é um jurista especializado em compliance, com larga experiência em Direito Administrativo, Direito Eleitoral e 
+ética na Administração Pública Federal.
 
-Analise o texto abaixo usando SOMENTE o resumo da base legal fornecido.
+Atue de forma técnica, objetiva, fundamentada e neutra, sem emitir juízos políticos ou valorativos.
+[/PERSONA]
+
+[CONTEXTO]
+Durante o período eleitoral, é essencial que a Administração Pública observe rigorosamente as normas legais e éticas aplicáveis
+às comunicações institucionais, bem como as condutas que são vedadas por lei, regulamento, norma etc. 
+
+Para fins desta análise de conformidade, são considerados, EXCLUSIVAMENTE: 
+1 - O texto passado pelo usuário por meio da variável "texto";
+2 - a data do pleito passada por meio da variável "data_referencia"; e 
+3 - O RESUMO PRÉVIO DA BASE LEGAL processado na etapa resumo da base legal.
+
+[FLUXO]
+Com base no texto, execute rigorosamente as seguintes etapas: 
+1 - Divida o texto abaixo em trechos significativos (frases ou parágrafos com ideia completa e autônoma).
+2 - Analise a conformidade de cada trecho com relação ao RESUMO PRÉVIO DA BASE LEGAL.
+3 - Observe rigorosamente a data de início do pleito e as vedações correspondentes aos períodos de 3 e 6 meses que antecedem o pleito. As regras estão 
+na resultado do processamento da base legal. 
 
 RESUMO DA BASE LEGAL (referência única para julgar conformidade):
 \"\"\"{resumo_base_legal}\"\"\"
 
-INSTRUÇÕES ESTRICTAS – OBEDEÇA RIGOROSAMENTE:
-- Ignore completamente: política de privacidade, cookies, LGPD, acessibilidade, navegação (TAB/ENTER/CTRL), razão social, CNPJ, endereço, termos de uso, login, contato, rodapé, menu, header, footer ou qualquer elemento estrutural/não-notícia.
+INSTRUÇÕES RESTRIÇÃO SOBRE ELEMENTOS OU TAGs DE CONTEÚDOS EXTRAÍDOS – Desconsidere trechos cujo header traz uma dos seguintes termos:
+- Ignore completamente links ou trechos que iniciem ou contenha de forma estrutural do html os seguintes termos: 
+  'política de privacidade', 'cookies', 'LGPD', 'acessibilidade', 
+  'navegação' '(TAB/ENTER/CTRL)', 'razão social', 'CNPJ', 'endereço', 'termos de uso', 'login'', 
+  'contato', 'rodapé', 'menu', 'header',  'footer', "Acesse", "Serviços", "Órgão Vinculado", "Siga-nos" ou 
+   qualquer elemento estrutural que não seja um texto com não-notícia.
+  
 - Foque apenas em notícias, comunicados ou textos institucionais relevantes.
 - Divida o texto em trechos significativos (frases ou parágrafos com ideia completa).
 - Classifique cada trecho como "conforme" ou "não_conforme" com base no resumo.
 - NÃO escreva NENHUM texto explicativo, introdução, conclusão, comentário ou palavra extra.
-- Retorne EXATAMENTE apenas estas duas linhas, sem aspas extras, sem JSON, sem formatação adicional:
+- Retorne EXATAMENTE cada trecho analisado para o processo de contagem, 
+  sem aspas extras, sem JSON, sem formatação adicional.
+_ Para cada trecho não conforme adicione à lista trechos_nao_conformes
+
+---------------------- RESULTADO ---------------------------------
+
+A resposta final tem apenas 2 variáveis, trechos_nao_conformes e contagem, e deve-se seguir rigorosamente os seguintes formatos:
 
 trechos_nao_conformes = [["trecho1 não conforme"], ["trecho2 não conforme"], ...]
 
@@ -354,7 +388,7 @@ contagem = [total_trechos_analisados, total_conformes, total_nao_conformes]
 
 Exemplos obrigatórios do formato exato (copie exatamente):
 Se houver 2 não conformes em 10 trechos (8 conformes):
-trechos_nao_conformes = [["Texto do primeiro não conforme"], ["Texto do segundo não conforme"]]
+trechos_nao_conformes = [["Texto do primeiro trecho não conforme"], ["Texto do segundo trecho não conforme"]]
 contagem = [10, 8, 2]
 
 
@@ -455,10 +489,11 @@ def extrair_texto(url_noticia: str) -> str:
             favor_recall=True,
             favor_precision=True,
             no_fallback=False,
-            include_formatting=False
+            include_formatting=False,
+            output_format="txt",
         )
 
-        if text_noticia and len(text_noticia.strip()) > 100:
+        if text_noticia and len(text_noticia.strip()) > 150:
             texto_final = text_noticia # retorna uma str
         else:
             print(f"[WARN] Extração Trafilatura baixa em {url_noticia}")
@@ -472,7 +507,7 @@ def extrair_texto(url_noticia: str) -> str:
         try:
             print(f"[FALLBACK] html2txt ativado para {url_noticia}")
             raw_text = html2txt(downloaded_noticia)
-            if raw_text and len(raw_text.strip()) > 200:
+            if raw_text and len(raw_text.strip()) > 150:
                 texto_final = raw_text
         except:
             pass
@@ -489,7 +524,7 @@ def extrair_texto(url_noticia: str) -> str:
                 tag.extract()
 
             bs_text = bs_noticia.get_text(separator="\n")
-            if bs_text and len(bs_text.strip()) > 80:
+            if bs_text and len(bs_text.strip()) > 150:
                 texto_final = bs_text
 
         except Exception as e:
@@ -504,8 +539,22 @@ def extrair_texto(url_noticia: str) -> str:
 
     return texto_final
 
+##### Esse trecho foi mantido para eventuais testes de raspagem feitos de forma mais crua.
+# def extrair_texto(url: str) -> str:
+#     # Baixa o HTML bruto
+#     html = trafilatura.fetch_url(url)
+#     if not html:
+#         print(f"[ERRO] Não foi possível baixar: {url}")
+#         return ""
+#
+#     # Extrai o texto no modo padrão
+#     texto_final = trafilatura.extract(html)
+#
+#     return texto_final if texto_final else ""
+
+
 # ==============================================================
-#            FUNÇÃO PARA FILTRAR CONTEÚDO RELEVANTE
+#            FUNÇÃO PARA FILTRAR CONTEÚDO IRRELEVANTE
 # ==============================================================
 
 def filtrar_conteudo_relevante(texto: str) -> str:
@@ -514,7 +563,8 @@ def filtrar_conteudo_relevante(texto: str) -> str:
     irrelevantes_keywords = [
         "política de privacidade", "cookies", "lgpd", "acessibilidade", "navegação", "teclas", "tab", "enter",
         "rolagem", "ctrl", "command", "razão social", "cnpj", "endereço", "contato", "login", "termos de uso",
-        "sobre nós", "rodapé", "footer", "header", "menu", "navegador", "privacidade", "segurança"
+        "sobre nós", "rodapé", "footer", "header", "menu", "navegador", "privacidade", "segurança", "captcha",
+        "WhatsApp"
     ]
     # Remove seções inteiras que contenham palavras-chave
     blocos = re.split(r'\n\s*\n', texto)  # separa por parágrafos duplos

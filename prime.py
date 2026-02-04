@@ -529,9 +529,8 @@ def filtrar_conteudo_relevante(texto: str) -> str:
             blocos_filtrados.append(bloco)
     return "\n\n".join(blocos_filtrados).strip()
 
-"""
+
 # ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ PROMPT PARA ANÁLISE DE CONTEÚDO DOS SITES ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-"""
 
 prompt_padrao = """
 Você é um jurista especializado em compliance, com larga experiência em Direito Administrativo, Direito Eleitoral e 
@@ -906,4 +905,5 @@ if resultados_para_plot:
 # Rodapé
 st.markdown("---")
 st.caption("Analisador de Conformidade de Conduta Vedada | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+
 

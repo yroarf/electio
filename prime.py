@@ -349,7 +349,7 @@ with st.expander("📋 Base Legal", expanded=False):
                 st.session_state.conteudo_base_legal += "\n\n" + texto_manual.strip()
             st.info("Texto de referência pronto.")
 
-            if st.button("Análise da Base Legal"):
+            if st.button("Analisar Base Legal"):
                 with st.spinner("Analisando a base legal..."):
                     analise_bl = analisar_base_legal(
                         st.session_state.conteudo_base_legal,
@@ -909,6 +909,7 @@ if resultados_para_plot:
 # Rodapé
 st.markdown("---")
 st.caption("ELECTIO | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+
 
 
 

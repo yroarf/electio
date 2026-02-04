@@ -228,13 +228,13 @@ with st.expander("🌐 sites", expanded=False):
 
 # ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ BASE LEGAL ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
-"""
-Esse trecho do código é dedicado ao carregamento da normatização aplicável.
-A estrutura separada visa dimininuir a latência e reduzir a quantidade de tokens
-utilizados.
-A base de dados é trabalhada no mesmo ambiente de análise dos sites visando estabelecer
-uma conexão com o prompt de análise de conformidade dos conteúdos dos sites.
-"""
+
+#Esse trecho do código é dedicado ao carregamento da normatização aplicável.
+#A estrutura separada visa dimininuir a latência e reduzir a quantidade de tokens
+#utilizados.
+#A base de dados é trabalhada no mesmo ambiente de análise dos sites visando estabelecer
+#uma conexão com o prompt de análise de conformidade dos conteúdos dos sites.
+
 
 @st.cache_data(ttl=3600) #decorator para carregar os dados na memória cache e evitar execuções repetidas
 def analisar_base_legal(base_legal: str, data_referencia: str, modeloIA: str) -> str:
@@ -362,9 +362,9 @@ with st.expander("📋 Base Legal", expanded=False):
                     st.markdown(analise_bl)
 
 
-"""
+
 # ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ FUNÇÕES AUXILIARES ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-"""
+
 # ◆━━━━━━━━━━━━━━━━━━━━━━━ FUNÇÃO PARA COLETA DE LINKS DO SITE ━━━━━━━━━━━━━━━━━━━━━━━◆
 
 def coletar_links_internos(url: str, max_links) -> set:
@@ -618,11 +618,11 @@ with st.expander("🧠 Prompt", expanded=False):
         key=f"prompt_editor_{st.session_state.prompt_reset}"
     )
 
-"""
+
 # ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 # ░░░░░░░░░░░░░░░ FUNÇÃO PARA ANÁLISE COM LLM - chamada da API do Groq ░░░░░░░░░░░░░░░░░░░░░
 # ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-"""
+
 
 def analisar_com_llm(texto: str,
                      model: str,
@@ -712,11 +712,11 @@ def analisar_com_llm(texto: str,
         return [], [0, 0, 0]
 
 
-"""
+
 # ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 # ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ANÁLISE DOS SITES ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 # ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-"""
+
 
 if "resultados" not in st.session_state:
     st.session_state.resultados = []
@@ -789,11 +789,11 @@ if analisar:
         progress_bar.empty()
         st.session_state.resultados = resultados_analise_llm
 
-"""
+
 # ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 # ░░░░░░░░░░░░░░░░░░░░░ TABELA E GRÁFICO DE BARRAS DOS RESULTADOS ░░░░░░░░░░░░░░░░░░░░░░░░░░
 # ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-"""
+
 
 resultados_para_plot = st.session_state.get("resultados", [])
 
@@ -906,3 +906,4 @@ if resultados_para_plot:
 # Rodapé
 st.markdown("---")
 st.caption("Analisador de Conformidade de Conduta Vedada | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+

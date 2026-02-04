@@ -908,7 +908,8 @@ if resultados_para_plot:
 
 # Rodapé
 st.markdown("---")
-st.caption("Analisador de Conformidade de Conduta Vedada | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+st.caption("ELECTIO | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+
 
 
 

@@ -111,15 +111,15 @@ with st.expander("🤖 **Configurações do Modelo de IA**", expanded=False):
         modeloIA = st.session_state.modeloIA
     with col_model2:
         # Define o máximo de links por URL que serão pesquisados
-        max_links = st.slider("Número máximo de LINKS por URL", 1, 20, 5, help="Quantos links internos seguir por site")
+        max_links = st.slider("Número máximo de LINKS por URL", 1, 20, 5, help="Quantos links internos por site.")
 
     col_temp, col_caract = st.columns(2)
     with col_temp:
         # Define a temperatura para a LLM considerar a análise mais flexível (criativa) ou rígida (estatística)
-        temperatura = st.slider("Temperatura (criatividade)", 0.0, 2.0, 0.1, 0.1, help="O valor 0.0 é determinístico")
+        temperatura = st.slider("Temperatura (criatividade)", 0.0, 2.0, 0.1, 0.1, help="O valor 0.0 é determinístico.")
     with col_caract:
         # Define o número máximo de caracteres lidos para cada trecho da lido
-        quant_caract = st.slider("Quantidade Máxima de Caracteres", 100, 500, 250, 50)
+        quant_caract = st.slider("Quantidade mínima de caracteres", 100, 500, 250, 50, help="Valores menores aumentam a quantidade de trechos para análise.")
 
 # ◆━━━━━━━━━━━━   ADIÇÃO DE SITES   ━━━━━━━━━━━━━━━━━━━━━━━━◆
 
@@ -349,7 +349,7 @@ with st.expander("📋 Base Legal", expanded=False):
                 st.session_state.conteudo_base_legal += "\n\n" + texto_manual.strip()
             st.info("Texto de referência pronto.")
 
-            if st.button("Gerar Análise da Base Legal"):
+            if st.button("Análise da Base Legal"):
                 with st.spinner("Analisando a base legal..."):
                     analise_bl = analisar_base_legal(
                         st.session_state.conteudo_base_legal,
@@ -658,16 +658,16 @@ def analisar_com_llm(texto: str,
 
         content = response.choices[0].message.content.strip()
 
-        print("=====================================content========================")
-        print(content)
-        """
-        Armazena os trechos não conformes e realiza a contagem global
-        """
+        #print("=====================================content========================")
+        #print(content)
+        
+        # Armazena os trechos não conformes e realiza a contagem global
+        
         trechos_nao_conformes = []
         contagem = [0, 0, 0]
 
         # Modificação 1: Expressão regular mais flexível
-        match_trechos = re.search(r'trechos_nao_conformes\s*=\s*(\[.*?\])', content, re.DOTALL | re.IGNORECASE)
+        match_trechos = re.search(r'trechos_nao_conformes\s*=\s*(\[.*?])', content, re.DOTALL | re.IGNORECASE)
         if match_trechos:
             lista_str = match_trechos.group(1)
             # Limpar aspas e caracteres especiais
@@ -692,7 +692,11 @@ def analisar_com_llm(texto: str,
                     trechos_nao_conformes = [t.strip() for t in trechos_encontrados]
 
         # Modificação 2: Expressão regular para contagem
-        match_contagem = re.search(r'contagem\s*=\s*(\[\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\])', content, re.IGNORECASE)
+        match_contagem = re.search(r'contagem\s*=\s*(\[\s*\d+\s*,\s*\d+\s*,\s*\d+\s*])', content, re.IGNORECASE)
+        
+        contagem = None
+        contagem_str = None
+        
         if match_contagem:
             try:
                 contagem_str = match_contagem.group(1)
@@ -888,7 +892,7 @@ if resultados_para_plot:
 
             ax.set_xlabel("")
             ax.set_ylabel("Conformidade (%)", fontsize=10)
-            ax.set_title(" 📊 Grau de Conformidade", fontsize=10, pad=20)
+            ax.set_title(" 📊 Grau de Conformidade dos Trechos Analisados", fontsize=10, pad=20)
 
             ax.tick_params(axis='x', labelsize=8, rotation=45)
             ax.tick_params(axis='y', labelsize=8)
@@ -905,5 +909,6 @@ if resultados_para_plot:
 # Rodapé
 st.markdown("---")
 st.caption("Analisador de Conformidade de Conduta Vedada | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+
 
 

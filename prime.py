@@ -404,7 +404,7 @@ def coletar_links_internos(url: str, max_links) -> set:
 
 # ◆━━━━━━━━━━━━━━━━━━━━━━━ FUNÇÃO PARA EXTRAÇÃO DE TEXTO ━━━━━━━━━━━━━━━━━━━━━━━◆
 
-@st.cache_resource(ttl=3600 * 4)  # Reutiliza browser → economia de recurso
+@st.cache_resource(ttl=3600 * 4)  # Reutiliza browser para economizar de recurso
 def _get_playwright_browser():
     pw = sync_playwright().start()
     browser = pw.firefox.launch(headless=True, timeout=50000)
@@ -834,7 +834,7 @@ if resultados_para_plot:
         df_nao_conformes = df_nao_conformes.drop_duplicates()
 
         st.divider()
-        st.subheader("🟥 Trechos identificados como possível indício de conduta vedada")
+        st.subheader("🟥 Trechos identificados com possível indício de conduta vedada")
 
         # Exibe a tabela interativa (com filtro, ordenação, etc.)
         st.dataframe(
@@ -909,6 +909,7 @@ if resultados_para_plot:
 # Rodapé
 st.markdown("---")
 st.caption("ELECTIO | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+
 
 
 

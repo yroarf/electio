@@ -21,7 +21,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 st.set_page_config(
-    page_title=" Analisador de Conformidade",
+    page_title=" ELECTIO",
     page_icon="🗳️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -909,6 +909,7 @@ if resultados_para_plot:
 # Rodapé
 st.markdown("---")
 st.caption("ELECTIO | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+
 
 
 

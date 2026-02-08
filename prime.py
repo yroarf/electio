@@ -242,37 +242,43 @@ def analisar_base_legal(base_legal: str, data_referencia: str, modeloIA: str) ->
         return "Nenhuma base legal fornecida."
 
     prompt_base_legal = f"""
-    Você é um jurista especializado em Direito Eleitoral.
-
-    Dada a base legal completa de referência e considerando a data de referência do pleito \"\"\"{data_referencia}\"\"\",
-
-    Gere uma análise ESTRUTURADA, Densa e Hierárquica destacando as vedações, proibições e condutas vedadas aos
-    agentes públicos no período eleitoral, com base na data de referência informada pelo usuário.
     
-    Calcule as datas para os períodos de defeso eleitoral que antecedem o primeiro pleito, considerando o primeiro período 6 meses que antecedem
-    o pleito e o segundo período com 3 meses que antecedem o pleito. 
-    
-    ** Considere rigorosamente as condutas vedadas em função das datas que antecedem a data de referência por 6 e 3 meses, 
-    analisando e identificando vedações como propaganda institucional, uso de bens públicos, etc, atreladas ao período de
-    defeso eleitoral.
+    [PERSONA] 
+      Você é um jurista especializado em compliance, com experiência em Direito Administrativo, Direito Eleitoral e ética na Administração Pública Federal brasileira. 
+    [/PERSONA] 
 
-    Estrutura obrigatória da análise (use exatamente este formato markdown para facilitar parsing):
-    - **Parágrafos com as Vedações principais** (liste com bullets numerados ou -)
-    - **Indicações dos Períodos de incidência** (datas relativas à eleição)
-    - **Parágrafos destacanto as Exceções e condutas permitidas**
-    - **Parágrafos indicandos as Sanções típicas** (breve)
+    [CONTEXTO] 
+      Dada a base legal completa de referência e considerando como data do pleito a seguinte data informada pelo usuário \"\"\"{data_referencia}\"\"\", 
+    [/CONTEXTO] 
 
-    A análise não deve prejudicar a compreensão do conteúdo legal, por isso, além de completo, deve ser
-    o mais fiel possível ao texto da base legal carregada pelo usuário, SOMENTE ELIMINE redundâncias e linguagem prolixa.
-     
-    Deixe bem claras as vedações correspondentes aos prazos de 3 e 6 meses do defeso eleitoral que 
-    antecedem a data do primeiro pleito (data_referencia).
+    [TAREFA] 
+      Elabore uma análise jurídica estruturada, hierárquica e densa e das vedações, proibições e condutas vedadas aos agentes públicos no período eleitoral. 
+        1. Calcule e indique expressamente: 
+          - o período de defeso iniciado 6 meses antes da data do pleito; 
+          - o período de defeso iniciado 3 meses antes da data do pleito. 
+        2. Analise rigorosamente as condutas vedadas aplicáveis a cada um desses períodos, tais como: 
+         - propaganda institucional; 
+         - uso de bens e serviços públicos; 
+         - outras vedações previstas na legislação eleitoral. 
+       3. Não considere turnos eleitorais. Todos os prazos devem ser calculados exclusivamente em relação à data do pleito informada. 
+       4. Utilize exatamente a seguinte estrutura de formato markdown (para facilitar parsing): 
+        - **Parágrafos com as Vedações principais** (liste com bullets numerados ou -) 
+        - **Indicações dos Períodos de incidência** (datas relativas à eleição) 
+        - **Parágrafos destacando as Exceções e condutas permitidas** 
+        - **Parágrafos indicando as Sanções típicas** (breve) 
+       5. A análise deve ser fiel à base legal fornecida, eliminando apenas redundâncias e linguagem prolixa, sem prejuízo da precisão jurídica. 
+       Destaque as vedações correspondentes aos dois períodos do defeso eleitoral que antecedem a data do pleito (data_referencia). 
 
-    Base legal completa:
-    \"\"\"{base_legal}\"\"\"
+ 
+    Base legal completa: 
+    \"\"\"{base_legal}\"\"\" 
+    Responda exclusivamente com o documento da análise estruturada, sem introdução, contextualização inicial ou conclusão. 
+    [/TAREFA] 
+    """ 
 
-    Responda APENAS com o documento da análise estruturada, sem introdução nem conclusão.
-    """
+    # Carrega o prompt que será passado para análise pela LLM 
+
+    messages = [ChatCompletionUserMessageParam(role="user", content=prompt_base_legal)] 
     # Carrega o prompt que será passado para análise pela LLM
     messages = [ChatCompletionUserMessageParam(role="user", content=prompt_base_legal)]
 
@@ -909,6 +915,7 @@ if resultados_para_plot:
 # Rodapé
 st.markdown("---")
 st.caption("ELECTIO | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+
 
 
 

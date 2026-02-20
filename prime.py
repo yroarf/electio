@@ -22,7 +22,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 st.set_page_config(
     page_title=" ELECTIO",
-    page_icon="🗳️",
+    page_icon="assets/logo_site.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -64,7 +64,10 @@ LISTA_1 = [
 
 col_titulo, col_data = st.columns(2)
 with col_titulo:
-    st.title("🗳️ Analisador de Conformidade Normativa")
+    colLogo1, colLogo2, colLogo3, colLogo4, colLogo5 = st.columns(5)
+    with colLogo2:
+        st.image("assets/logo.png", width=256)
+    st.title("Analisador de Conformidade Normativa")
 with col_data:
     st.markdown("**Data de referência**")
     data_referencia = st.date_input(
@@ -915,6 +918,7 @@ if resultados_para_plot:
 # Rodapé
 st.markdown("---")
 st.caption("ELECTIO | Desenvolvido por Fabiana, João Vicente, Lívia, Túlio e Yroá")
+
 
 
 
